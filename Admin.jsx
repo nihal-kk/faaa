@@ -13,6 +13,10 @@ const CATEGORIES = [
   'other'
 ]
 
+// =====================================================
+// UPLOAD MODAL
+// =====================================================
+
 function UploadModal({ onClose, onUploaded, authHeaders }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
@@ -25,17 +29,20 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
 
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
+
   const fileRef = useRef(null)
 
   // =====================================================
-  // 🔴 PUT YOUR N8N WEBHOOK URL HERE
+  // N8N WEBHOOK
   // =====================================================
+
   const N8N_WEBHOOK_URL =
     'https://n8n.muhammadnihal.in/webhook-test/zeina-upload'
 
   // =====================================================
   // HANDLE FILE SELECT
   // =====================================================
+
   const handleFile = (e) => {
     const f = e.target.files[0]
 
@@ -68,6 +75,7 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
   // =====================================================
   // HANDLE DRAG & DROP
   // =====================================================
+
   const handleDrop = (e) => {
     e.preventDefault()
 
@@ -100,8 +108,10 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
   }
 
   // =====================================================
-  // SEND IMAGE + DETAILS TO N8N
+  // UPLOAD
+  // BACKEND + N8N
   // =====================================================
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -119,73 +129,163 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
     setError('')
 
     try {
-      // Create FormData
-      const fd = new FormData()
+      // =================================================
+      // STEP 1 — UPLOAD IMAGE TO YOUR BACKEND
+      // =================================================
 
-      // Actual image file
-      fd.append('image', file)
+      const backendFormData = new FormData()
 
-      // Details
-      fd.append('title', form.title.trim())
-      fd.append('category', form.category)
-      fd.append('description', form.description.trim())
+      backendFormData.append('image', file)
 
-      // Extra file information
-      fd.append('originalName', file.name)
-      fd.append('mimeType', file.type)
-      fd.append('size', file.size.toString())
+      console.log('Uploading image to backend...')
 
-      console.log('Sending image to n8n...')
-      console.log({
-        title: form.title,
-        category: form.category,
-        description: form.description,
-        filename: file.name,
-        type: file.type,
-        size: file.size
-      })
-
-      // Send directly to n8n
-      const response = await axios.post(
-        N8N_WEBHOOK_URL,
-        fd,
+      const { data: uploaded } = await axios.post(
+        '/api/upload',
+        backendFormData,
         {
           headers: {
-            // Keep your authentication headers if required
-            ...authHeaders
-
+            ...authHeaders,
             // IMPORTANT:
-            // Do NOT manually set Content-Type here.
-            // Axios automatically creates:
-            // multipart/form-data; boundary=...
+            // Do not manually set Content-Type.
+            // Browser/Axios will add multipart boundary.
           },
-
-          // 60 second timeout
           timeout: 60000
         }
       )
 
-      console.log('n8n response:', response.data)
+      console.log('Backend upload successful:', uploaded)
 
-      // Refresh gallery
+      // =================================================
+      // STEP 2 — SEND SAME IMAGE + DETAILS TO N8N
+      // =================================================
+
+      const n8nFormData = new FormData()
+
+      n8nFormData.append('image', file)
+
+      n8nFormData.append(
+        'title',
+        form.title.trim()
+      )
+
+      n8nFormData.append(
+        'category',
+        form.category
+      )
+
+      n8nFormData.append(
+        'description',
+        form.description.trim()
+      )
+
+      n8nFormData.append(
+        'originalName',
+        file.name
+      )
+
+      n8nFormData.append(
+        'mimeType',
+        file.type
+      )
+
+      n8nFormData.append(
+        'size',
+        file.size.toString()
+      )
+
+      console.log('Sending image to n8n...')
+
+      const n8nResponse = await axios.post(
+        N8N_WEBHOOK_URL,
+        n8nFormData,
+        {
+          headers: {
+            // Keep auth headers if required
+            ...authHeaders
+
+            // DO NOT set Content-Type manually.
+          },
+          timeout: 60000
+        }
+      )
+
+      console.log(
+        'n8n response:',
+        n8nResponse.data
+      )
+
+      // =================================================
+      // STEP 3 — SAVE WORK DETAILS TO MONGODB
+      // =================================================
+
+      console.log(
+        'Saving work details to database...'
+      )
+
+      await axios.post(
+        '/api/works',
+        {
+          title: form.title.trim(),
+          category: form.category,
+          description: form.description.trim(),
+
+          // Information returned from backend upload
+          filename: uploaded.filename,
+          originalName:
+            uploaded.originalName || file.name,
+          mimeType:
+            uploaded.mimeType || file.type,
+          size:
+            uploaded.size || file.size
+        },
+        {
+          headers: authHeaders,
+          timeout: 60000
+        }
+      )
+
+      console.log(
+        'Work saved successfully to MongoDB'
+      )
+
+      // =================================================
+      // STEP 4 — REFRESH ADMIN GALLERY
+      // =================================================
+
       await onUploaded()
 
-      // Close modal
+      // =================================================
+      // STEP 5 — CLOSE MODAL
+      // =================================================
+
       onClose()
 
     } catch (err) {
-      console.error('N8N upload error:', err)
+      console.error(
+        'Upload process error:',
+        err
+      )
 
       let message = 'Upload failed'
 
       if (err.code === 'ECONNABORTED') {
-        message = 'Request timed out. Please try again.'
-      } else if (err.response?.data?.message) {
-        message = err.response.data.message
-      } else if (err.response?.data?.error) {
-        message = err.response.data.error
-      } else if (err.message) {
-        message = err.message
+        message =
+          'Request timed out. Please try again.'
+      }
+
+      else if (err.response?.data?.message) {
+        message =
+          err.response.data.message
+      }
+
+      else if (err.response?.data?.error) {
+        message =
+          err.response.data.error
+      }
+
+      else if (err.message) {
+        message =
+          err.message
       }
 
       setError(message)
@@ -198,12 +298,14 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
   // =====================================================
   // UI
   // =====================================================
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
 
       <div className="bg-[#2d1a17] border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden">
 
         {/* Header */}
+
         <div className="flex items-center justify-between p-6 border-b border-white/10">
 
           <h2 className="font-serif text-xl text-gold">
@@ -212,7 +314,8 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
 
           <button
             onClick={onClose}
-            className="text-ivory/30 hover:text-ivory transition-colors text-2xl leading-none"
+            disabled={uploading}
+            className="text-ivory/30 hover:text-ivory transition-colors text-2xl leading-none disabled:opacity-50"
           >
             &times;
           </button>
@@ -220,12 +323,14 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
         </div>
 
         {/* Form */}
+
         <form
           onSubmit={handleSubmit}
           className="p-6 space-y-4"
         >
 
           {/* Drop Zone */}
+
           <div
             className="border-2 border-dashed border-white/20 rounded-xl p-6 text-center cursor-pointer hover:border-gold/40 transition-colors duration-300"
             onDrop={handleDrop}
@@ -242,15 +347,19 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
             />
 
             {preview ? (
+
               <img
                 src={preview}
                 alt="preview"
                 className="w-32 h-32 object-cover rounded-xl mx-auto mb-2"
               />
+
             ) : (
+
               <div className="text-5xl mb-2">
                 🌸
               </div>
+
             )}
 
             <p className="text-ivory/40 text-sm">
@@ -266,6 +375,7 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
           </div>
 
           {/* Title */}
+
           <input
             required
             value={form.title}
@@ -280,6 +390,7 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
           />
 
           {/* Category */}
+
           <select
             value={form.category}
             onChange={(e) =>
@@ -292,6 +403,7 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
           >
 
             {CATEGORIES.map((c) => (
+
               <option
                 key={c}
                 value={c}
@@ -299,11 +411,13 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
               >
                 {c.charAt(0).toUpperCase() + c.slice(1)}
               </option>
+
             ))}
 
           </select>
 
           {/* Description */}
+
           <textarea
             value={form.description}
             onChange={(e) =>
@@ -318,15 +432,21 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
           />
 
           {/* Error */}
+
           {error && (
+
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+
               <p className="text-red-400 text-xs">
                 {error}
               </p>
+
             </div>
+
           )}
 
           {/* Buttons */}
+
           <div className="flex gap-3">
 
             <button
@@ -344,14 +464,16 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
               className="flex-1 bg-gold text-brown font-semibold py-3 rounded-xl text-sm hover:bg-gold-light transition-all disabled:opacity-50"
             >
               {uploading
-                ? 'Sending...'
-                : 'Upload & Send'}
+                ? 'Uploading...'
+                : 'Upload & Save'}
             </button>
 
           </div>
 
         </form>
+
       </div>
+
     </div>
   )
 }
@@ -361,7 +483,12 @@ function UploadModal({ onClose, onUploaded, authHeaders }) {
 // EDIT MODAL
 // =====================================================
 
-function EditModal({ work, onClose, onSaved, authHeaders }) {
+function EditModal({
+  work,
+  onClose,
+  onSaved,
+  authHeaders
+}) {
 
   const [form, setForm] = useState({
     title: work.title,
@@ -390,9 +517,12 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
       onSaved()
       onClose()
 
-    } catch {
+    } catch (err) {
 
-      // ignore
+      console.error(
+        'Edit error:',
+        err
+      )
 
     } finally {
 
@@ -406,7 +536,6 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
 
       <div className="bg-[#2d1a17] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden">
 
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/10">
 
           <h2 className="font-serif text-xl text-gold">
@@ -415,14 +544,14 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
 
           <button
             onClick={onClose}
-            className="text-ivory/30 hover:text-ivory text-2xl leading-none"
+            disabled={saving}
+            className="text-ivory/30 hover:text-ivory text-2xl leading-none disabled:opacity-50"
           >
             &times;
           </button>
 
         </div>
 
-        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="p-6 space-y-4"
@@ -453,6 +582,7 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
           >
 
             {CATEGORIES.map((c) => (
+
               <option
                 key={c}
                 value={c}
@@ -460,6 +590,7 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
               >
                 {c.charAt(0).toUpperCase() + c.slice(1)}
               </option>
+
             ))}
 
           </select>
@@ -482,7 +613,8 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 border border-white/20 text-ivory/60 py-3 rounded-xl text-sm hover:bg-white/5 transition-all"
+              disabled={saving}
+              className="flex-1 border border-white/20 text-ivory/60 py-3 rounded-xl text-sm hover:bg-white/5 transition-all disabled:opacity-50"
             >
               Cancel
             </button>
@@ -500,7 +632,9 @@ function EditModal({ work, onClose, onSaved, authHeaders }) {
           </div>
 
         </form>
+
       </div>
+
     </div>
   )
 }
@@ -527,7 +661,6 @@ export default function Admin() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [deleting, setDeleting] = useState(null)
 
-
   // =====================================================
   // CHECK LOGIN
   // =====================================================
@@ -542,7 +675,6 @@ export default function Admin() {
     fetchWorks()
 
   }, [token])
-
 
   // =====================================================
   // GET WORKS
@@ -560,13 +692,19 @@ export default function Admin() {
 
       setWorks(data)
 
+    } catch (err) {
+
+      console.error(
+        'Fetch works error:',
+        err
+      )
+
     } finally {
 
       setLoading(false)
 
     }
   }
-
 
   // =====================================================
   // DELETE WORK
@@ -597,13 +735,19 @@ export default function Admin() {
         )
       )
 
+    } catch (err) {
+
+      console.error(
+        'Delete error:',
+        err
+      )
+
     } finally {
 
       setDeleting(null)
 
     }
   }
-
 
   // =====================================================
   // FILTER
@@ -613,9 +757,9 @@ export default function Admin() {
     activeCategory === 'all'
       ? works
       : works.filter(
-          (w) => w.category === activeCategory
+          (w) =>
+            w.category === activeCategory
         )
-
 
   // =====================================================
   // UI
@@ -625,6 +769,7 @@ export default function Admin() {
     <div className="min-h-screen bg-[#150905] text-ivory">
 
       {/* Header */}
+
       <header className="border-b border-white/10 bg-[#1a0a08]/80 backdrop-blur-md sticky top-0 z-40">
 
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -643,7 +788,6 @@ export default function Admin() {
             </span>
 
           </div>
-
 
           <div className="flex items-center gap-4">
 
@@ -678,9 +822,11 @@ export default function Admin() {
 
 
       {/* Main */}
+
       <div className="max-w-7xl mx-auto px-6 py-8">
 
         {/* Stats */}
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
 
           {[
@@ -691,13 +837,15 @@ export default function Admin() {
             {
               label: 'Bridal',
               value: works.filter(
-                (w) => w.category === 'bridal'
+                (w) =>
+                  w.category === 'bridal'
               ).length
             },
             {
               label: 'Arabic',
               value: works.filter(
-                (w) => w.category === 'arabic'
+                (w) =>
+                  w.category === 'arabic'
               ).length
             },
             {
@@ -733,6 +881,7 @@ export default function Admin() {
 
 
         {/* Category Filter */}
+
         <div className="flex flex-wrap gap-2 mb-6">
 
           {[
@@ -760,6 +909,7 @@ export default function Admin() {
 
 
         {/* Grid */}
+
         {loading ? (
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -805,6 +955,7 @@ export default function Admin() {
               >
 
                 {/* Image */}
+
                 <div className="aspect-square overflow-hidden">
 
                   <img
@@ -818,6 +969,7 @@ export default function Admin() {
 
 
                 {/* Info */}
+
                 <div className="p-3">
 
                   <p className="text-gold/60 text-[9px] tracking-widest uppercase">
@@ -829,15 +981,18 @@ export default function Admin() {
                   </p>
 
                   {work.description && (
+
                     <p className="text-ivory/30 text-xs truncate mt-0.5">
                       {work.description}
                     </p>
+
                   )}
 
                 </div>
 
 
                 {/* Actions */}
+
                 <div className="flex gap-2 px-3 pb-3">
 
                   <button
@@ -877,6 +1032,7 @@ export default function Admin() {
 
 
       {/* Upload Modal */}
+
       {showUpload && (
 
         <UploadModal
@@ -891,6 +1047,7 @@ export default function Admin() {
 
 
       {/* Edit Modal */}
+
       {editWork && (
 
         <EditModal
