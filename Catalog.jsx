@@ -59,7 +59,7 @@ const Catalog = () => {
     }
 
 
-    // Only products with valid quantity
+    // Only products with quantity > 0
     const validCart = cart.filter(
       item => Number(item.quantity) > 0
     );
@@ -72,7 +72,6 @@ const Catalog = () => {
 
     try {
 
-
       // =================================================
       // DATABASE ORDER ITEMS
       // =================================================
@@ -83,7 +82,7 @@ const Catalog = () => {
 
         quantity: Number(item.quantity),
 
-        unit: item.unit,
+        unit: item.unit || '',
 
         price: Number(item.price)
 
@@ -91,10 +90,22 @@ const Catalog = () => {
 
 
       // =================================================
-      // N8N INVOICE ITEMS
+      // INVOICE ITEMS FOR N8N
+      // =================================================
       //
       // IMPORTANT:
-      // Send every product separately.
+      // Every product is sent separately.
+      //
+      // Example:
+      //
+      // {
+      //   name: "Loaded Bowl",
+      //   qty: 2,
+      //   unit: "PCS",
+      //   price: 500,
+      //   total: 1000
+      // }
+      //
       // =================================================
 
       const invoiceItems = validCart.map(item => {
@@ -102,10 +113,8 @@ const Catalog = () => {
         const quantity =
           Number(item.quantity);
 
-
         const price =
           Number(item.price);
-
 
         const total =
           quantity * price;
@@ -116,18 +125,14 @@ const Catalog = () => {
           name:
             item.product.name,
 
-
           qty:
             quantity,
-
 
           unit:
             item.unit || '',
 
-
           price:
             price,
-
 
           total:
             total
@@ -138,7 +143,7 @@ const Catalog = () => {
 
 
       // =================================================
-      // CALCULATE CART TOTAL
+      // CALCULATE SUBTOTAL
       // =================================================
 
       const calculatedTotal =
@@ -150,7 +155,7 @@ const Catalog = () => {
 
 
       // =================================================
-      // WEBHOOK PAYLOAD
+      // N8N WEBHOOK PAYLOAD
       // =================================================
 
       const webhookPayload = {
@@ -159,30 +164,25 @@ const Catalog = () => {
           user?.username ||
           'Unknown Branch',
 
-
         phone:
           user?.phone ||
           user?.mobile ||
           '',
 
-
-        // THIS IS NOW AN ARRAY
-        // NOT A STRING
+        // IMPORTANT:
+        // This is an ARRAY, not a string.
         items:
           invoiceItems,
 
-
-        // Overall subtotal
+        // Subtotal
         price:
           calculatedTotal,
 
-
-        // Let n8n calculate GST
+        // n8n calculates GST
         gst:
           0,
 
-
-        // Base total before GST
+        // Total before GST
         total:
           calculatedTotal
 
@@ -195,24 +195,27 @@ const Catalog = () => {
 
       try {
 
-        await axios.post(
+        const webhookResponse =
+          await axios.post(
 
-          'https://n8n.muhammadnihal.in/webhook-test/chef-bill',
+            'https://n8n.muhammadnihal.in/webhook/chef-bill',
 
-          webhookPayload,
+            webhookPayload,
 
-          {
-            headers: {
-              'Content-Type': 'application/json'
+            {
+              headers: {
+                'Content-Type': 'application/json'
+              }
             }
-          }
 
-        );
+          );
+
 
         console.log(
-          'Invoice webhook sent successfully:',
-          webhookPayload
+          'Invoice webhook sent successfully',
+          webhookResponse.data
         );
+
 
       } catch (webhookErr) {
 
@@ -225,7 +228,7 @@ const Catalog = () => {
 
 
       // =================================================
-      // SAVE ORDER TO BACKEND
+      // SAVE ORDER TO DATABASE
       // =================================================
 
       await axios.post(
@@ -301,8 +304,10 @@ const Catalog = () => {
         <div
           style={{
             position: 'fixed',
+
             top: 0,
             left: 0,
+
             width: '100vw',
             height: '100vh',
 
@@ -313,9 +318,11 @@ const Catalog = () => {
 
             display: 'flex',
 
-            justifyContent: 'center',
+            justifyContent:
+              'center',
 
-            alignItems: 'center'
+            alignItems:
+              'center'
           }}
         >
 
@@ -340,6 +347,7 @@ const Catalog = () => {
             <div
               style={{
                 width: '80px',
+
                 height: '80px',
 
                 borderRadius: '50%',
@@ -351,9 +359,11 @@ const Catalog = () => {
 
                 display: 'flex',
 
-                justifyContent: 'center',
+                justifyContent:
+                  'center',
 
-                alignItems: 'center',
+                alignItems:
+                  'center',
 
                 fontSize: '40px',
 
@@ -433,9 +443,11 @@ const Catalog = () => {
 
             display: 'flex',
 
-            justifyContent: 'center',
+            justifyContent:
+              'center',
 
-            alignItems: 'center',
+            alignItems:
+              'center',
 
             padding: '1rem'
           }}
@@ -466,7 +478,7 @@ const Catalog = () => {
           >
 
 
-            {/* CLOSE */}
+            {/* CLOSE BUTTON */}
 
             <button
               onClick={() =>
@@ -558,13 +570,14 @@ const Catalog = () => {
                   >
 
 
-                    {/* PRODUCT INFO */}
+                    {/* PRODUCT DETAILS */}
 
                     <div>
 
                       <div
                         style={{
-                          fontWeight: 'bold',
+                          fontWeight:
+                            'bold',
 
                           fontSize:
                             '1.1rem'
@@ -584,9 +597,10 @@ const Catalog = () => {
                         }}
                       >
 
-                        ₹{Number(item.price).toFixed(2)}
-                        {' '}
-                        per {item.unit}
+                        ₹
+                        {Number(item.price).toFixed(2)}
+
+                        {' '}per {item.unit}
 
                       </div>
 
@@ -620,7 +634,7 @@ const Catalog = () => {
                     </div>
 
 
-                    {/* QUANTITY */}
+                    {/* QUANTITY CONTROLS */}
 
                     <div
                       style={{
@@ -642,9 +656,13 @@ const Catalog = () => {
                       }}
                     >
 
+                      {/* MINUS */}
+
                       <button
+
                         onClick={() =>
                           updateQuantity(
+
                             item.product._id,
 
                             (
@@ -652,6 +670,7 @@ const Catalog = () => {
                                 item.quantity
                               ) || 0
                             ) - 1
+
                           )
                         }
 
@@ -665,21 +684,29 @@ const Catalog = () => {
 
                           height: '30px',
 
-                          borderRadius: '4px',
+                          borderRadius:
+                            '4px',
 
-                          cursor: 'pointer',
+                          cursor:
+                            'pointer',
 
-                          fontWeight: 'bold'
+                          fontWeight:
+                            'bold'
                         }}
                       >
                         -
                       </button>
 
 
+                      {/* QUANTITY INPUT */}
+
                       <input
+
                         type="number"
 
-                        value={item.quantity}
+                        value={
+                          item.quantity
+                        }
 
                         onChange={(e) => {
 
@@ -735,12 +762,17 @@ const Catalog = () => {
 
                           outline: 'none'
                         }}
+
                       />
 
 
+                      {/* PLUS */}
+
                       <button
+
                         onClick={() =>
                           updateQuantity(
+
                             item.product._id,
 
                             (
@@ -748,6 +780,7 @@ const Catalog = () => {
                                 item.quantity
                               ) || 0
                             ) + 1
+
                           )
                         }
 
@@ -761,11 +794,14 @@ const Catalog = () => {
 
                           height: '30px',
 
-                          borderRadius: '4px',
+                          borderRadius:
+                            '4px',
 
-                          cursor: 'pointer',
+                          cursor:
+                            'pointer',
 
-                          fontWeight: 'bold'
+                          fontWeight:
+                            'bold'
                         }}
                       >
                         +
@@ -825,7 +861,10 @@ const Catalog = () => {
                         'var(--primary)'
                     }}
                   >
-                    ₹{Number(cartTotal).toFixed(2)}
+                    ₹
+                    {Number(
+                      cartTotal
+                    ).toFixed(2)}
                   </span>
 
                 </div>
@@ -837,7 +876,8 @@ const Catalog = () => {
                   className="btn btn-primary w-full"
 
                   style={{
-                    padding: '1rem',
+                    padding:
+                      '1rem',
 
                     fontSize:
                       '1.1rem'
@@ -919,7 +959,6 @@ const Catalog = () => {
           e.currentTarget.style.transform =
             'scale(1)'
         }
-
       >
 
         <svg
@@ -1141,7 +1180,8 @@ const Catalog = () => {
 
               <div
                 style={{
-                  marginTop: 'auto',
+                  marginTop:
+                    'auto',
 
                   paddingTop:
                     '1rem',
@@ -1177,7 +1217,10 @@ const Catalog = () => {
                         'var(--primary)'
                     }}
                   >
-                    ₹{Number(p.price).toFixed(2)}
+                    ₹
+                    {Number(
+                      p.price
+                    ).toFixed(2)}
                   </span>
 
 
