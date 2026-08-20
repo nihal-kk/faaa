@@ -5,12 +5,12 @@ import { AuthContext } from '../../context/AuthContext';
 
 const Catalog = () => {
   const [products, setProducts] = useState([]);
+  const [branches, setBranches] = useState([]);
 
   const {
     cart,
     addToCart,
     updateQuantity,
-    removeFromCart,
     clearCart,
     cartTotal
   } = useContext(CartContext);
@@ -31,13 +31,17 @@ const Catalog = () => {
 
       try {
 
-        const { data } = await axios.get('/api/products');
+        const { data } =
+          await axios.get('/api/products');
 
         setProducts(data);
 
       } catch (err) {
 
-        console.error('Failed to fetch products:', err);
+        console.error(
+          'Failed to fetch products:',
+          err
+        );
 
       }
 
@@ -46,6 +50,145 @@ const Catalog = () => {
     fetchProducts();
 
   }, []);
+
+
+  // =====================================================
+  // FETCH BRANCHES
+  // =====================================================
+
+  useEffect(() => {
+
+    const fetchBranches = async () => {
+
+      try {
+
+        const { data } =
+          await axios.get('/api/branches');
+
+        setBranches(
+          Array.isArray(data)
+            ? data
+            : []
+        );
+
+      } catch (err) {
+
+        console.error(
+          'Failed to fetch branches:',
+          err
+        );
+
+      }
+
+    };
+
+    fetchBranches();
+
+  }, []);
+
+
+  // =====================================================
+  // FIND CURRENT BRANCH
+  // =====================================================
+
+  const getCurrentBranch = () => {
+
+    if (!Array.isArray(branches) || branches.length === 0) {
+      return null;
+    }
+
+
+    // -------------------------------------------------
+    // Possible branch ID fields from user
+    // -------------------------------------------------
+
+    const branchId =
+      user?.branchId ||
+      user?.branch_id ||
+      user?.branch?._id ||
+      user?.branch?.id;
+
+
+    // -------------------------------------------------
+    // If user has branchId, use it
+    // -------------------------------------------------
+
+    if (branchId) {
+
+      const found =
+        branches.find(
+          branch =>
+            String(branch._id) ===
+            String(branchId)
+        );
+
+      if (found) {
+        return found;
+      }
+
+    }
+
+
+    // -------------------------------------------------
+    // If user.branch itself is an ID/string
+    // -------------------------------------------------
+
+    if (
+      user?.branch &&
+      typeof user.branch === 'string'
+    ) {
+
+      const found =
+        branches.find(
+          branch =>
+            String(branch._id) ===
+            String(user.branch)
+        );
+
+      if (found) {
+        return found;
+      }
+
+    }
+
+
+    // -------------------------------------------------
+    // Try matching username with branch name
+    // -------------------------------------------------
+
+    if (user?.username) {
+
+      const username =
+        String(user.username)
+          .trim()
+          .toLowerCase();
+
+
+      const found =
+        branches.find(branch => {
+
+          const branchName =
+            String(branch.name || '')
+              .trim()
+              .toLowerCase();
+
+          return (
+            branchName === username
+          );
+
+        });
+
+
+      if (found) {
+        return found;
+      }
+
+    }
+
+
+    return null;
+
+  };
 
 
   // =====================================================
@@ -59,10 +202,11 @@ const Catalog = () => {
     }
 
 
-    // Only products with quantity > 0
-    const validCart = cart.filter(
-      item => Number(item.quantity) > 0
-    );
+    const validCart =
+      cart.filter(
+        item =>
+          Number(item.quantity) > 0
+      );
 
 
     if (validCart.length === 0) {
@@ -72,84 +216,107 @@ const Catalog = () => {
 
     try {
 
+
+      // =================================================
+      // FIND BRANCH
+      // =================================================
+
+      const currentBranch =
+        getCurrentBranch();
+
+
+      // =================================================
+      // BRANCH INFORMATION
+      // =================================================
+
+      const branchName =
+        currentBranch?.name ||
+        user?.branchName ||
+        user?.branch?.name ||
+        user?.username ||
+        'Unknown Branch';
+
+
+      const managerName =
+        currentBranch?.managerName ||
+        'Unknown Manager';
+
+
+      const managerPhone =
+        currentBranch?.whatsAppNumber ||
+        '';
+
+
       // =================================================
       // DATABASE ORDER ITEMS
       // =================================================
 
-      const items = validCart.map(item => ({
+      const items =
+        validCart.map(item => ({
 
-        product: item.product._id,
+          product:
+            item.product._id,
 
-        quantity: Number(item.quantity),
-
-        unit: item.unit || '',
-
-        price: Number(item.price)
-
-      }));
-
-
-      // =================================================
-      // INVOICE ITEMS FOR N8N
-      // =================================================
-      //
-      // IMPORTANT:
-      // Every product is sent separately.
-      //
-      // Example:
-      //
-      // {
-      //   name: "Loaded Bowl",
-      //   qty: 2,
-      //   unit: "PCS",
-      //   price: 500,
-      //   total: 1000
-      // }
-      //
-      // =================================================
-
-      const invoiceItems = validCart.map(item => {
-
-        const quantity =
-          Number(item.quantity);
-
-        const price =
-          Number(item.price);
-
-        const total =
-          quantity * price;
-
-
-        return {
-
-          name:
-            item.product.name,
-
-          qty:
-            quantity,
+          quantity:
+            Number(item.quantity),
 
           unit:
             item.unit || '',
 
           price:
-            price,
+            Number(item.price)
 
-          total:
-            total
-
-        };
-
-      });
+        }));
 
 
       // =================================================
-      // CALCULATE SUBTOTAL
+      // INVOICE ITEMS
+      // =================================================
+
+      const invoiceItems =
+        validCart.map(item => {
+
+          const quantity =
+            Number(item.quantity);
+
+          const price =
+            Number(item.price);
+
+          const total =
+            quantity * price;
+
+
+          return {
+
+            name:
+              item.product.name,
+
+            qty:
+              quantity,
+
+            unit:
+              item.unit || '',
+
+            price:
+              price,
+
+            total:
+              total
+
+          };
+
+        });
+
+
+      // =================================================
+      // CALCULATE TOTAL
       // =================================================
 
       const calculatedTotal =
         invoiceItems.reduce(
           (sum, item) =>
-            sum + Number(item.total || 0),
+            sum +
+            Number(item.total || 0),
           0
         );
 
@@ -160,33 +327,67 @@ const Catalog = () => {
 
       const webhookPayload = {
 
+        // -------------------------------
+        // BRANCH DETAILS
+        // -------------------------------
+
         branch:
-          user?.username ||
-          'Unknown Branch',
+          branchName,
+
+        manager:
+          managerName,
 
         phone:
-          user?.phone ||
-          user?.mobile ||
-          '',
+          managerPhone,
 
-        // IMPORTANT:
-        // This is an ARRAY, not a string.
+
+        // -------------------------------
+        // PRODUCTS
+        // -------------------------------
+
         items:
           invoiceItems,
 
-        // Subtotal
+
+        // -------------------------------
+        // TOTAL
+        // -------------------------------
+
         price:
           calculatedTotal,
 
-        // n8n calculates GST
         gst:
           0,
 
-        // Total before GST
         total:
           calculatedTotal
 
       };
+
+
+      // =================================================
+      // DEBUG
+      // =================================================
+
+      console.log(
+        'BRANCH:',
+        branchName
+      );
+
+      console.log(
+        'MANAGER:',
+        managerName
+      );
+
+      console.log(
+        'PHONE:',
+        managerPhone
+      );
+
+      console.log(
+        'N8N PAYLOAD:',
+        webhookPayload
+      );
 
 
       // =================================================
@@ -195,27 +396,24 @@ const Catalog = () => {
 
       try {
 
-        const webhookResponse =
-          await axios.post(
+        await axios.post(
 
-            'https://n8n.muhammadnihal.in/webhook/chef-bill',
+          'https://n8n.muhammadnihal.in/webhook/chef-bill',
 
-            webhookPayload,
+          webhookPayload,
 
-            {
-              headers: {
-                'Content-Type': 'application/json'
-              }
+          {
+            headers: {
+              'Content-Type':
+                'application/json'
             }
+          }
 
-          );
-
-
-        console.log(
-          'Invoice webhook sent successfully',
-          webhookResponse.data
         );
 
+        console.log(
+          'Invoice webhook sent successfully'
+        );
 
       } catch (webhookErr) {
 
@@ -228,14 +426,15 @@ const Catalog = () => {
 
 
       // =================================================
-      // SAVE ORDER TO DATABASE
+      // SAVE ORDER
       // =================================================
 
       await axios.post(
         '/api/orders',
         {
           items,
-          totalAmount: calculatedTotal
+          totalAmount:
+            calculatedTotal
         }
       );
 
@@ -269,7 +468,7 @@ const Catalog = () => {
 
 
   // =====================================================
-  // CART ITEM COUNT
+  // CART COUNT
   // =====================================================
 
   const cartItemsCount =
@@ -304,7 +503,6 @@ const Catalog = () => {
         <div
           style={{
             position: 'fixed',
-
             top: 0,
             left: 0,
 
@@ -347,7 +545,6 @@ const Catalog = () => {
             <div
               style={{
                 width: '80px',
-
                 height: '80px',
 
                 borderRadius: '50%',
@@ -477,9 +674,6 @@ const Catalog = () => {
             }}
           >
 
-
-            {/* CLOSE BUTTON */}
-
             <button
               onClick={() =>
                 setShowCartModal(false)
@@ -517,8 +711,6 @@ const Catalog = () => {
             </h2>
 
 
-            {/* EMPTY CART */}
-
             {cart.length === 0 ? (
 
               <p
@@ -538,11 +730,6 @@ const Catalog = () => {
             ) : (
 
               <div className="mt-2">
-
-
-                {/* =================================================
-                    CART ITEMS
-                    ================================================= */}
 
                 {cart.map(item => (
 
@@ -569,9 +756,6 @@ const Catalog = () => {
                     }}
                   >
 
-
-                    {/* PRODUCT DETAILS */}
-
                     <div>
 
                       <div
@@ -596,16 +780,14 @@ const Catalog = () => {
                             'var(--gray-dark)'
                         }}
                       >
-
                         ₹
-                        {Number(item.price).toFixed(2)}
+                        {Number(
+                          item.price
+                        ).toFixed(2)}
 
                         {' '}per {item.unit}
-
                       </div>
 
-
-                      {/* ITEM TOTAL */}
 
                       <div
                         style={{
@@ -622,19 +804,15 @@ const Catalog = () => {
                             'bold'
                         }}
                       >
-
                         Total: ₹
                         {(
                           Number(item.price) *
                           Number(item.quantity || 0)
                         ).toFixed(2)}
-
                       </div>
 
                     </div>
 
-
-                    {/* QUANTITY CONTROLS */}
 
                     <div
                       style={{
@@ -656,13 +834,9 @@ const Catalog = () => {
                       }}
                     >
 
-                      {/* MINUS */}
-
                       <button
-
                         onClick={() =>
                           updateQuantity(
-
                             item.product._id,
 
                             (
@@ -670,7 +844,6 @@ const Catalog = () => {
                                 item.quantity
                               ) || 0
                             ) - 1
-
                           )
                         }
 
@@ -698,10 +871,7 @@ const Catalog = () => {
                       </button>
 
 
-                      {/* QUANTITY INPUT */}
-
                       <input
-
                         type="number"
 
                         value={
@@ -762,17 +932,12 @@ const Catalog = () => {
 
                           outline: 'none'
                         }}
-
                       />
 
 
-                      {/* PLUS */}
-
                       <button
-
                         onClick={() =>
                           updateQuantity(
-
                             item.product._id,
 
                             (
@@ -780,7 +945,6 @@ const Catalog = () => {
                                 item.quantity
                               ) || 0
                             ) + 1
-
                           )
                         }
 
@@ -813,10 +977,6 @@ const Catalog = () => {
 
                 ))}
 
-
-                {/* =================================================
-                    CART TOTAL
-                    ================================================= */}
 
                 <div
                   style={{
@@ -870,8 +1030,6 @@ const Catalog = () => {
                 </div>
 
 
-                {/* PLACE ORDER */}
-
                 <button
                   className="btn btn-primary w-full"
 
@@ -902,7 +1060,7 @@ const Catalog = () => {
 
 
       {/* =================================================
-          FLOATING CART BUTTON
+          FLOATING CART
           ================================================= */}
 
       <button
@@ -1064,7 +1222,7 @@ const Catalog = () => {
 
 
       {/* =================================================
-          PRODUCT GRID
+          PRODUCTS
           ================================================= */}
 
       <div
@@ -1096,9 +1254,6 @@ const Catalog = () => {
               overflow: 'hidden'
             }}
           >
-
-
-            {/* IMAGE */}
 
             <div
               style={{
@@ -1134,8 +1289,6 @@ const Catalog = () => {
 
             </div>
 
-
-            {/* PRODUCT CONTENT */}
 
             <div
               style={{
