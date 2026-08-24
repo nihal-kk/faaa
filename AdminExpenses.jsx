@@ -184,6 +184,9 @@ const AdminExpenses = () => {
                   <option value="Maintenance">Maintenance</option>
                   <option value="Maintenance">Raw Materials</option>
                   <option value="Maintenance">Purchase</option>
+                  <option value="Maintenance">EMI</option>
+                  <option value="Maintenance">Packaging</option>
+                  <option value="Maintenance">Equipment</option>
                   <option value="Other">Other</option>
                 </select>
               </div>
