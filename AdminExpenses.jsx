@@ -15,6 +15,7 @@ const AdminExpenses = () => {
   const [previewUrl, setPreviewUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const [notification, setNotification] = useState({ message: '', type: '' });
   const formRef = useRef(null);
@@ -43,6 +44,23 @@ const AdminExpenses = () => {
       setImageFile(file);
       setPreviewUrl(URL.createObjectURL(file));
     }
+  };
+
+  const handleEditClick = (expense) => {
+    setNewExpense({
+      description: expense.description,
+      amount: expense.amount,
+      category: expense.category || 'Other',
+      date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      invoiceUrl: expense.invoiceUrl || ''
+    });
+    setEditingId(expense._id);
+    setPreviewUrl(expense.invoiceUrl || '');
+    setImageFile(null);
+    setShowAddForm(true);
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleDeleteClick = async (id) => {
@@ -75,11 +93,19 @@ const AdminExpenses = () => {
         finalInvoiceUrl = uploadRes.data.imageUrl;
       }
 
-      await axios.post('/api/expenses', {
-        ...newExpense,
-        invoiceUrl: finalInvoiceUrl
-      });
-      showNotification('Expense created successfully!');
+      if (editingId) {
+        await axios.put(`/api/expenses/${editingId}`, {
+          ...newExpense,
+          invoiceUrl: finalInvoiceUrl
+        });
+        showNotification('Expense updated successfully!');
+      } else {
+        await axios.post('/api/expenses', {
+          ...newExpense,
+          invoiceUrl: finalInvoiceUrl
+        });
+        showNotification('Expense created successfully!');
+      }
 
       setNewExpense({
         description: '', amount: '', category: 'Other', date: new Date().toISOString().split('T')[0], invoiceUrl: ''
@@ -87,6 +113,7 @@ const AdminExpenses = () => {
       setImageFile(null);
       setPreviewUrl('');
       setShowAddForm(false);
+      setEditingId(null);
       fetchExpenses();
     } catch (err) {
       showNotification(err.response?.data?.message || 'Error saving expense', 'error');
@@ -124,6 +151,7 @@ const AdminExpenses = () => {
             setNewExpense({ description: '', amount: '', category: 'Other', date: new Date().toISOString().split('T')[0], invoiceUrl: '' });
             setPreviewUrl('');
             setImageFile(null);
+            setEditingId(null);
             setShowAddForm(true);
             setTimeout(() => {
               formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -160,7 +188,7 @@ const AdminExpenses = () => {
         {showAddForm && (
           <div className="card" style={{ flex: '1', minWidth: '300px' }} ref={formRef}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Add New Expense</h3>
+              <h3 style={{ margin: 0 }}>{editingId ? 'Edit Expense' : 'Add New Expense'}</h3>
             </div>
             <form onSubmit={handleAddExpense} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1.5rem' }}>
               <div>
@@ -219,11 +247,11 @@ const AdminExpenses = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button type="button" className="btn btn-outline" style={{ flex: 1, border: 'none', backgroundColor: '#f1f5f9', color: '#0f172a' }} onClick={() => setShowAddForm(false)}>
+                <button type="button" className="btn btn-outline" style={{ flex: 1, border: 'none', backgroundColor: '#f1f5f9', color: '#0f172a' }} onClick={() => { setShowAddForm(false); setEditingId(null); }}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1, backgroundColor: '#10b981', borderColor: '#10b981' }} disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving...' : 'Save'}
+                  {isSubmitting ? (editingId ? 'Updating...' : 'Saving...') : (editingId ? 'Update' : 'Save')}
                 </button>
               </div>
             </form>
@@ -270,9 +298,14 @@ const AdminExpenses = () => {
                       )}
                     </td>
                     <td data-label="Actions">
-                      <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)' }} onClick={() => handleDeleteClick(e._id)}>
-                        Del
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem', borderColor: '#3b82f6', color: '#3b82f6' }} onClick={() => handleEditClick(e)}>
+                          Edit
+                        </button>
+                        <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem', borderColor: 'var(--danger)', color: 'var(--danger)' }} onClick={() => handleDeleteClick(e._id)}>
+                          Del
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
